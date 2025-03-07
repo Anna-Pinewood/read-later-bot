@@ -12,3 +12,6 @@ wheels/
 # Config and env
 .env
 *.yaml
+
+# notebooks
+notebooks

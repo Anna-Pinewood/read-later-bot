@@ -6,5 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "aiogram>=3.18.0",
+    "asyncpg>=0.30.0",
     "python-dotenv>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
 ]
