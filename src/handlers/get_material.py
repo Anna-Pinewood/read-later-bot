@@ -9,6 +9,7 @@ import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+import re
 
 from db.database import db
 import text
@@ -83,9 +84,34 @@ async def send_material_info(message: Message, content_item: dict) -> None:
     date_added = content_item["date_added"].strftime("%d.%m.%Y %H:%M")
     status = "Прочитано" if content_item["status"] == "processed" else "Не прочитано"
     
+    # Check if this is a forwarded message and create a link if possible
+    message_link = None
+    message_id = content_item.get("message_id")
+    chat_id = content_item.get("chat_id")
+    
+    if message_id and chat_id:
+        # For private chats/channels, Telegram API adds -100 prefix to chat_id
+        # We need to strip it for the link
+        if str(chat_id).startswith('-100'):
+            chat_id_for_link = str(chat_id)[4:]  # Remove '-100' prefix
+            message_link = f"https://t.me/c/{chat_id_for_link}/{message_id}"
+        else:
+            # For public chats, we'd need the username which we don't have stored
+            # This is a fallback that might work in some cases
+            message_link = f"https://t.me/{chat_id}/{message_id}"
+    
+    # If the content is a URL, use it directly
+    if content and (content.startswith('http://') or content.startswith('https://')):
+        display_content = content  # The URL will be displayed as is and clickable
+    else:
+        # For text content or forwarded messages with a message link
+        display_content = content
+        if message_link:
+            display_content += f"\n\n[➡️ Перейти к оригиналу]({message_link})"
+    
     # Format the message
     response = text.material_info_template.format(
-        content=content,
+        content=display_content,
         content_type=content_type,
         date_added=date_added,
         status=status
@@ -95,7 +121,8 @@ async def send_material_info(message: Message, content_item: dict) -> None:
     await message.answer(
         response,
         reply_markup=get_status_update_keyboard(content_id),
-        disable_web_page_preview=False  # Enable link previews
+        disable_web_page_preview=False,  # Enable link previews
+        parse_mode="Markdown"  # Enable markdown for the message link
     )
 
 

@@ -46,6 +46,8 @@ async def process_any_message(message: Message, state: FSMContext) -> None:
         logger.info("User %s forwarded a message to the collection", user_id)
         if message.forward_from_chat:
             source = f"@{message.forward_from_chat.username or 'channel'}"
+            # Store the chat username if available (for public channels)
+            channel_username = message.forward_from_chat.username
     else:
         logger.info("User %s sent a message to the collection", user_id)
 
@@ -62,6 +64,13 @@ async def process_any_message(message: Message, state: FSMContext) -> None:
         if message.forward_from_chat:
             message_id = message.forward_from_message_id
             chat_id = message.forward_from_chat.id
+
+            # If it's a channel and has a username, store source as the username
+            if message.forward_from_chat.username:
+                source = f"@{message.forward_from_chat.username}"
+            # For private channels, we use the ID with -100 prefix
+            else:
+                source = f"channel_{chat_id}"
 
         # Add content to database
         content_id = await db.add_content_item(
