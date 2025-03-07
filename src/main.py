@@ -7,7 +7,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from handlers import commands, add_material
+from handlers import commands, add_material, get_material
 from consts import BOT_TOKEN
 from db.database import db  # Import the database instance
 
@@ -37,6 +37,7 @@ async def main():
     # Include routers
     dp.include_router(commands.router)
     dp.include_router(add_material.router)
+    dp.include_router(get_material.router)
 
     # Start polling
     await bot.delete_webhook(drop_pending_updates=True)

@@ -126,3 +126,33 @@ def get_tags_keyboard(tags: list[dict] = None, page: int = 0) -> InlineKeyboardM
     builder.adjust(*rows_adjustment)
     
     return builder.as_markup()
+
+
+def get_status_update_keyboard(content_id: int) -> InlineKeyboardMarkup:
+    """
+    Create keyboard with buttons to update content status.
+    
+    Args:
+        content_id: ID of the content item
+        
+    Returns:
+        InlineKeyboardMarkup: Keyboard with buttons to mark as read/unread
+    """
+    builder = InlineKeyboardBuilder()
+    
+    # Add status update buttons
+    builder.add(
+        InlineKeyboardButton(
+            text=text.mark_as_read_msg, 
+            callback_data=f"status:{content_id}:processed"
+        ),
+        InlineKeyboardButton(
+            text=text.mark_as_unread_msg, 
+            callback_data=f"status:{content_id}:unread"
+        )
+    )
+    
+    # Arrange buttons in a row
+    builder.adjust(2)
+    
+    return builder.as_markup()

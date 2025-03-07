@@ -1,24 +1,30 @@
 """
 Reply keyboards for the bot.
+
+Contains keyboard layouts for the main UI and navigation.
 """
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
+import text
 
 
 def get_main_keyboard() -> ReplyKeyboardMarkup:
     """
-    Create main keyboard for the bot.
-
+    Create the main reply keyboard with primary commands.
+    
     Returns:
-        ReplyKeyboardMarkup: Keyboard with main commands
+        ReplyKeyboardMarkup: Keyboard with /random, /last, and /all buttons
     """
     builder = ReplyKeyboardBuilder()
-
-    # Add buttons
+    
+    # Add command buttons
     builder.add(
-        KeyboardButton(text="🔄 Случайный материал"),
-        KeyboardButton(text="⏱ Последний материал")
+        KeyboardButton(text="/random"),
+        KeyboardButton(text="/last"),
+        KeyboardButton(text="/all")
     )
-
-    # Set the keyboard as persistent
-    return builder.as_markup(resize_keyboard=True, is_persistent=True)
+    
+    # Arrange buttons in a row
+    builder.adjust(3)
+    
+    return builder.as_markup(resize_keyboard=True, persistent=True)
