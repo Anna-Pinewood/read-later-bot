@@ -22,10 +22,13 @@ logger = logging.getLogger(__name__)
 URL_PATTERN = re.compile(r'https?://\S+')
 
 
-@router.message(NotCommandFilter())  # Match any message that is not a command and not in an active dialog
+@router.message(NotCommandFilter())
 async def process_any_message(message: Message, state: FSMContext) -> None:
     """
     Handle any message as potential material for the collection.
+
+    This handler will process messages as new content, even if the user was in the
+    middle of adding another content item but sent a message instead of pressing buttons.
 
     Args:
         message: Any message from the user
@@ -88,28 +91,32 @@ async def process_any_message(message: Message, state: FSMContext) -> None:
         await message.answer("Произошла ошибка при сохранении. Пожалуйста, попробуйте позже.")
 
 
-@router.callback_query(F.data.startswith("content_type:"), ContentItemStates.waiting_for_content_type)
+@router.callback_query(F.data.startswith("content_type:"))
 async def process_content_type(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Process content type selection.
+
+    Note: We removed the state filter so it works even if the state was cleared
+    by a new message being sent.
 
     Args:
         callback: Callback query from inline keyboard
         state: FSM context to track conversation state
     """
-    # Get user ID and content ID from state
+    # Get user ID
     user_id = callback.from_user.id
+
+    # Parse content type from callback data
+    _, content_type = callback.data.split(":", 1)
+
+    # First, check if we have content_id in state
     state_data = await state.get_data()
     content_id = state_data.get("content_id")
 
     if not content_id:
-        logger.error("No content_id found in state for user %s", user_id)
-        await callback.answer("Ошибка. Пожалуйста, отправьте материал заново.")
-        await state.clear()
+        logger.warning("No content_id found in state for user %s. Callback may be outdated.", user_id)
+        await callback.answer("Это сообщение устарело. Пожалуйста, используйте кнопки из последнего сообщения.")
         return
-
-    # Parse content type from callback data
-    _, content_type = callback.data.split(":", 1)
 
     try:
         if content_type != "skip":
@@ -146,23 +153,27 @@ async def process_content_type(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("tag:"), ContentItemStates.waiting_for_tag)
+@router.callback_query(F.data.startswith("tag:"))
 async def process_tag_selection(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Process tag selection or 'add new tag' / 'skip' options.
+
+    Note: We removed the state filter so it works even if the state was cleared
+    by a new message being sent.
 
     Args:
         callback: Callback query from inline keyboard
         state: FSM context to track conversation state
     """
     user_id = callback.from_user.id
+
+    # First, check if we have content_id in state
     state_data = await state.get_data()
     content_id = state_data.get("content_id")
 
     if not content_id:
-        logger.error("No content_id found in state for user %s", user_id)
-        await callback.answer("Ошибка. Пожалуйста, отправьте материал заново.")
-        await state.clear()
+        logger.warning("No content_id found in state for user %s. Callback may be outdated.", user_id)
+        await callback.answer("Это сообщение устарело. Пожалуйста, используйте кнопки из последнего сообщения.")
         return
 
     # Parse tag action from callback data
@@ -174,6 +185,7 @@ async def process_tag_selection(callback: CallbackQuery, state: FSMContext) -> N
             await callback.message.edit_text(text.new_tag_prompt_msg)
             # Keep the same state, but set a flag to indicate we're waiting for a new tag name
             await state.update_data(waiting_for_new_tag=True)
+            await state.set_state(ContentItemStates.waiting_for_tag)  # Ensure we're in the correct state
             await callback.answer()
             return
 
@@ -202,6 +214,9 @@ async def process_tag_selection(callback: CallbackQuery, state: FSMContext) -> N
         # Confirm tag addition
         await callback.answer(f"Тег '{tag_name}' добавлен")
 
+        # Set state to ensure we're in the right state
+        await state.set_state(ContentItemStates.waiting_for_tag)
+
         # Update keyboard to show the latest tags
         await callback.message.edit_text(
             text.tag_selected_msg.format(tag_name=tag_name) + "\n" + text.ask_tags_msg,
@@ -229,6 +244,7 @@ async def process_new_tag(message: Message, state: FSMContext) -> None:
     if not state_data.get("waiting_for_new_tag", False):
         # If we're in waiting_for_tag state but not specifically waiting for a new tag name,
         # it might be a new material the user sent without completing the previous flow
+        # This should be caught by the NotCommandFilter now, but keeping as a fallback
         logger.warning("User %s sent message while in tag selection but not waiting for new tag", user_id)
         await message.answer("Для добавления нового материала, пожалуйста, завершите текущий процесс или нажмите 'Пропустить'")
         return
@@ -274,3 +290,47 @@ async def process_new_tag(message: Message, state: FSMContext) -> None:
     except Exception as e:
         logger.error("Error adding new tag for user %s: %s", user_id, e)
         await message.answer("Произошла ошибка при добавлении тега. Пожалуйста, попробуйте позже.")
+
+
+@router.callback_query(F.data.startswith("page:"))
+async def process_tag_pagination(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Handle pagination for the tag selection keyboard.
+
+    Args:
+        callback: Callback query from inline keyboard
+        state: FSM context to track conversation state
+    """
+    user_id = callback.from_user.id
+
+    # Check if this is just the current page indicator (not a navigation button)
+    if callback.data == "page:current":
+        await callback.answer()
+        return
+
+    # Get the page number from the callback data
+    _, page_str = callback.data.split(":", 1)
+
+    try:
+        page = int(page_str)
+
+        # Get user tags for the updated keyboard
+        user_tags = await db.get_user_tags(user_id)
+
+        # Update the message with the new page of tags
+        await callback.message.edit_reply_markup(
+            reply_markup=get_tags_keyboard(user_tags, page=page)
+        )
+
+        # Make sure we're still in the right state
+        current_state = await state.get_state()
+        if current_state != ContentItemStates.waiting_for_tag:
+            await state.set_state(ContentItemStates.waiting_for_tag)
+
+        logger.info("User %s navigated to tag page %s", user_id, page)
+
+    except Exception as e:
+        logger.error("Error processing tag pagination for user %s: %s", user_id, e)
+        await callback.answer("Произошла ошибка при навигации. Пожалуйста, попробуйте позже.")
+
+    await callback.answer()

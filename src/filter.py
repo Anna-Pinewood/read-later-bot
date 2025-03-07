@@ -10,37 +10,43 @@ from states import ContentItemStates
 
 class NotCommandFilter(BaseFilter):
     """
-    Filter for messages that are not commands and not part of an active dialog flow.
+    Filter for messages that are not commands and should be treated as new content.
+
+    This handles two cases:
+    1. No active state - message is treated as new content
+    2. Active state but not explicitly waiting for text input - treat as new content
+       and reset the current conversation flow
     """
+
     async def __call__(self, message: Message, state: FSMContext) -> bool:
         """
-        Check if message is not a command and not part of an active dialog.
-        
-        This filter returns True only if:
-        1. The message is not a command (doesn't start with '/')
-        2. The bot is not in the middle of a structured conversation
-           (e.g., waiting for tag input)
-        
+        Check if message should be treated as new content.
+
         Args:
             message: Message to check
             state: Current FSM state
-            
+
         Returns:
             bool: True if the message should be treated as new content
         """
         # First check if it's a command - if so, don't process as content
         if message.text and message.text.startswith('/'):
             return False
-            
-        # Check the current state - if waiting for user input in a specific
-        # state, don't process as new content
+
+        # Get current state and state data
         current_state = await state.get_state()
-        
-        # If we're in any state of the content addition flow,
-        # don't treat this message as new content
-        if current_state in [ContentItemStates.waiting_for_content_type, 
-                             ContentItemStates.waiting_for_tag]:
+        state_data = await state.get_data()
+
+        # Special case: If we're explicitly waiting for new tag input,
+        # don't treat as new content
+        if current_state == ContentItemStates.waiting_for_tag and state_data.get("waiting_for_new_tag", False):
             return False
-            
-        # Otherwise, it's not a command and not part of a flow, so it's new content
+
+        # For all other states, even if we're in a flow (waiting for button press),
+        # treat text messages as new content and interrupt the current flow
+        if current_state:
+            # Clear the current state so we can start fresh with the new content
+            await state.clear()
+
+        # Message should be treated as new content
         return True
