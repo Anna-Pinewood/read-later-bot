@@ -62,6 +62,7 @@ async def process_any_message(message: Message, state: FSMContext) -> None:
         message_id = None
         chat_id = None
         if message.forward_from_chat:
+            logger.info("Is forwarded from chat")
             message_id = message.forward_from_message_id
             chat_id = message.forward_from_chat.id
 
@@ -72,6 +73,7 @@ async def process_any_message(message: Message, state: FSMContext) -> None:
             else:
                 source = f"channel_{chat_id}"
 
+        logger.info("Retrieved source info: message_id=%s, chat_id=%s, source=%s", message_id, chat_id, source)
         # Add content to database
         content_id = await db.add_content_item(
             user_id=user_id,

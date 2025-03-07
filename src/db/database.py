@@ -67,7 +67,7 @@ class Database:
         async with self.pool.acquire() as conn:
             try:
                 query = """
-                    INSERT INTO content_items 
+                    INSERT INTO content_items
                     (user_id, content, source, message_id, chat_id, content_type)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     RETURNING id
@@ -135,36 +135,59 @@ class Database:
 
     async def get_last_content_item(self,
                                     user_id: int,
-                                    content_type: str | None = None) -> Dict[str, Any] | None:
+                                    content_type: str | None = None,
+                                    status: str | None = None) -> Dict[str, Any] | None:
         """
         Get the last added content item for a user.
 
         Args:
             user_id: Telegram user ID
             content_type: Optional filter by content type
+            status: Optional filter by status ('unread' or 'processed')
 
         Returns:
             Dict or None: Content item data or None if not found
         """
         async with self.pool.acquire() as conn:
             try:
+                query_conditions = ["user_id = $1"]
+                query_params = [user_id]
+                param_index = 2
+
+                # Add content_type filter if provided
                 if content_type:
-                    query = """
-                        SELECT * FROM content_items
-                        WHERE user_id = $1 AND content_type = $2
-                        ORDER BY date_added DESC
-                        LIMIT 1
-                    """
-                    record = await conn.fetchrow(query, user_id, content_type)
+                    query_conditions.append(f"content_type = ${param_index}")
+                    query_params.append(content_type)
+                    param_index += 1
+
+                # Add status filter if provided
+                if status:
+                    query_conditions.append(f"status = ${param_index}")
+                    query_params.append(status)
+                    param_index += 1
+
+                # Combine conditions with AND
+                where_clause = " AND ".join(query_conditions)
+
+                # Build the complete query
+                query = f"""
+                    SELECT * FROM content_items
+                    WHERE {where_clause}
+                    ORDER BY date_added DESC
+                    LIMIT 1
+                """
+
+                record = await conn.fetchrow(query, *query_params)
+
+                # Log appropriate message based on filters
+                if content_type and status:
+                    logger.info("Retrieved last %s content with status '%s' for user %s",
+                                content_type, status, user_id)
+                elif content_type:
                     logger.info("Retrieved last %s content for user %s", content_type, user_id)
+                elif status:
+                    logger.info("Retrieved last content with status '%s' for user %s", status, user_id)
                 else:
-                    query = """
-                        SELECT * FROM content_items
-                        WHERE user_id = $1
-                        ORDER BY date_added DESC
-                        LIMIT 1
-                    """
-                    record = await conn.fetchrow(query, user_id)
                     logger.info("Retrieved last content item for user %s", user_id)
 
                 if record:
