@@ -9,6 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from handlers import commands, add_material
 from consts import BOT_TOKEN
+from db.database import db  # Import the database instance
 
 
 logging.basicConfig(
@@ -24,6 +25,11 @@ async def main():
     """Initialize and start the bot."""
     logger.info("Starting the bot")
 
+    # Initialize database connection
+    logger.info("Connecting to database")
+    await db.connect()
+    logger.info("Database connection established")
+
     bot = Bot(token=BOT_TOKEN)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
@@ -35,7 +41,13 @@ async def main():
     # Start polling
     await bot.delete_webhook(drop_pending_updates=True)
     logger.info("Bot started.")
-    await dp.start_polling(bot)
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        # Close database connection when bot stops
+        logger.info("Closing database connection")
+        await db.close()
 
 
 if __name__ == "__main__":

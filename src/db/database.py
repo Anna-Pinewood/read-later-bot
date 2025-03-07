@@ -449,6 +449,72 @@ class Database:
                 logger.error("Error getting statistics for user %s: %s", user_id, e)
                 return {"total": 0, "unread": 0, "read": 0, "read_last_week": 0, "read_last_month": 0}
 
+    async def get_user_content(self,
+                            user_id: int,
+                            limit: int = 100,
+                            offset: int = 0,
+                            content_type: str | None = None,
+                            status: str | None = None) -> list[Dict[str, Any]]:
+        """
+        Get all content items for a user, with unread items first,
+        then read items, both sorted by date (newest first).
 
+        Args:
+            user_id: Telegram user ID
+            limit: Maximum number of items to return (pagination)
+            offset: Offset for pagination
+            content_type: Optional filter by content type
+            status: Optional filter by status ('unread' or 'processed')
+
+        Returns:
+            List of content item dictionaries
+        """
+        async with self.pool.acquire() as conn:
+            try:
+                # Build the query based on the provided filters
+                query_params = [user_id]
+                query_conditions = ["user_id = $1"]
+                
+                # Add content_type filter if provided
+                if content_type:
+                    query_params.append(content_type)
+                    query_conditions.append(f"content_type = ${len(query_params)}")
+                    
+                # Add status filter if provided
+                if status:
+                    query_params.append(status)
+                    query_conditions.append(f"status = ${len(query_params)}")
+                    
+                # Combine conditions
+                where_clause = " AND ".join(query_conditions)
+                
+                # Build the complete query with ordering and pagination
+                # Order by status (unread first), then by date_added (newest first)
+                query = f"""
+                    SELECT * FROM content_items
+                    WHERE {where_clause}
+                    ORDER BY 
+                        CASE WHEN status = 'unread' THEN 0 ELSE 1 END,
+                        date_added DESC
+                    LIMIT ${len(query_params) + 1} OFFSET ${len(query_params) + 2}
+                """
+                
+                # Add pagination parameters
+                query_params.extend([limit, offset])
+                
+                # Execute the query
+                records = await conn.fetch(query, *query_params)
+                
+                # Convert records to dictionaries
+                result = [dict(record) for record in records]
+                
+                logger.info("Retrieved %s content items for user %s (limit=%s, offset=%s)",
+                        len(result), user_id, limit, offset)
+                
+                return result
+                
+            except Exception as e:
+                logger.error("Error getting content items for user %s: %s", user_id, e)
+                return []
 # Create a singleton instance
 db = Database()
