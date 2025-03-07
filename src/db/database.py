@@ -450,14 +450,15 @@ class Database:
                 return {"total": 0, "unread": 0, "read": 0, "read_last_week": 0, "read_last_month": 0}
 
     async def get_user_content(self,
-                            user_id: int,
-                            limit: int = 100,
-                            offset: int = 0,
-                            content_type: str | None = None,
-                            status: str | None = None) -> list[Dict[str, Any]]:
+                               user_id: int,
+                               limit: int = 100,
+                               offset: int = 0,
+                               content_type: str | None = None,
+                               status: str | None = None) -> list[Dict[str, Any]]:
         """
         Get all content items for a user, with unread items first,
         then read items, both sorted by date (newest first).
+        Includes tags for each content item.
 
         Args:
             user_id: Telegram user ID
@@ -467,54 +468,89 @@ class Database:
             status: Optional filter by status ('unread' or 'processed')
 
         Returns:
-            List of content item dictionaries
+            List of content item dictionaries with tags
         """
         async with self.pool.acquire() as conn:
             try:
                 # Build the query based on the provided filters
                 query_params = [user_id]
-                query_conditions = ["user_id = $1"]
-                
+                query_conditions = ["ci.user_id = $1"]
+
                 # Add content_type filter if provided
                 if content_type:
                     query_params.append(content_type)
-                    query_conditions.append(f"content_type = ${len(query_params)}")
-                    
+                    query_conditions.append(f"ci.content_type = ${len(query_params)}")
+
                 # Add status filter if provided
                 if status:
                     query_params.append(status)
-                    query_conditions.append(f"status = ${len(query_params)}")
-                    
+                    query_conditions.append(f"ci.status = ${len(query_params)}")
+
                 # Combine conditions
                 where_clause = " AND ".join(query_conditions)
-                
-                # Build the complete query with ordering and pagination
-                # Order by status (unread first), then by date_added (newest first)
-                query = f"""
-                    SELECT * FROM content_items
-                    WHERE {where_clause}
-                    ORDER BY 
-                        CASE WHEN status = 'unread' THEN 0 ELSE 1 END,
-                        date_added DESC
-                    LIMIT ${len(query_params) + 1} OFFSET ${len(query_params) + 2}
+
+                # First, get the content items with pagination
+                items_query = f"""
+                    WITH paginated_items AS (
+                        SELECT * FROM content_items ci
+                        WHERE {where_clause}
+                        ORDER BY 
+                            CASE WHEN ci.status = 'unread' THEN 0 ELSE 1 END,
+                            ci.date_added DESC
+                        LIMIT ${len(query_params) + 1} OFFSET ${len(query_params) + 2}
+                    )
+                    SELECT * FROM paginated_items
                 """
-                
+
                 # Add pagination parameters
                 query_params.extend([limit, offset])
-                
-                # Execute the query
-                records = await conn.fetch(query, *query_params)
-                
+
+                # Execute the query to get content items
+                item_records = await conn.fetch(items_query, *query_params)
+
                 # Convert records to dictionaries
-                result = [dict(record) for record in records]
-                
-                logger.info("Retrieved %s content items for user %s (limit=%s, offset=%s)",
-                        len(result), user_id, limit, offset)
-                
+                result = [dict(record) for record in item_records]
+
+                # If we have content items, get their tags
+                if result:
+                    # Extract content item IDs
+                    item_ids = [item["id"] for item in result]
+
+                    # Query to get tags for these content items
+                    tags_query = """
+                        SELECT cit.content_item_id, t.name
+                        FROM content_item_tags cit
+                        JOIN tags t ON cit.tag_id = t.id
+                        WHERE cit.content_item_id = ANY($1)
+                    """
+
+                    # Execute the query to get tags
+                    tag_records = await conn.fetch(tags_query, item_ids)
+
+                    # Create a dictionary to map content_item_id to list of tags
+                    item_tags = {}
+                    for record in tag_records:
+                        item_id = record["content_item_id"]
+                        tag_name = record["name"]
+
+                        if item_id not in item_tags:
+                            item_tags[item_id] = []
+
+                        item_tags[item_id].append(tag_name)
+
+                    # Add tags to each content item
+                    for item in result:
+                        item["tags"] = item_tags.get(item["id"], [])
+
+                logger.info("Retrieved %s content items with tags for user %s (limit=%s, offset=%s)",
+                            len(result), user_id, limit, offset)
+
                 return result
-                
+
             except Exception as e:
                 logger.error("Error getting content items for user %s: %s", user_id, e)
                 return []
+
+
 # Create a singleton instance
 db = Database()
