@@ -7,9 +7,9 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from handlers import commands, add_material, get_material
-from consts import BOT_TOKEN
-from db.database import db  # Import the database instance
+from src.handlers import commands, add_material, get_material
+from src.consts import BOT_TOKEN
+from src.db.database import db  # Import the database instance
 
 
 logging.basicConfig(

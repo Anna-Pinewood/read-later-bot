@@ -4,7 +4,7 @@ Inline keyboards for the bot.
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-import text
+import src.text as text
 
 
 def get_content_type_keyboard() -> InlineKeyboardMarkup:

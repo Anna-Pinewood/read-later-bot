@@ -5,7 +5,7 @@ from aiogram.filters import BaseFilter
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 
-from states import ContentItemStates
+from src.states import ContentItemStates
 
 
 class NotCommandFilter(BaseFilter):

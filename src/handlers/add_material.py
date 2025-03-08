@@ -9,11 +9,11 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from filter import NotCommandFilter
-from states import ContentItemStates
-from keyboards.inline import get_content_type_keyboard, get_tags_keyboard
-from db.database import db
-import text
+from src.filter import NotCommandFilter
+from src.states import ContentItemStates
+from src.keyboards.inline import get_content_type_keyboard, get_tags_keyboard
+from src.db.database import db
+import src.text as text
 
 router = Router()
 logger = logging.getLogger(__name__)

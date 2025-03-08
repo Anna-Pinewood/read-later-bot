@@ -11,9 +11,9 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 import re
 
-from db.database import db
-import text
-from keyboards.inline import get_status_update_keyboard
+from src.db.database import db
+import src.text as text
+from src.keyboards.inline import get_status_update_keyboard
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ async def send_material_info(message: Message, content_item: dict) -> None:
         display_content = content  # The URL will be displayed as is and clickable
     else:
         # For text content or forwarded messages with a message link
-        
+
         display_content = content
         if message_link:
             display_content = content[:500] + "..."

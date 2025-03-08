@@ -5,7 +5,7 @@ import logging
 from typing import Dict, List, Any, Optional
 import asyncpg
 
-from consts import (
+from src.consts import (
     POSTGRES_USER, POSTGRES_PASSWORD,
     POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT
 )
