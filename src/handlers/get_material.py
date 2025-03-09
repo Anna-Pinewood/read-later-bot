@@ -113,8 +113,8 @@ async def send_material_info(message: Message, content_item: dict) -> None:
             display_content = content[:500] + "..."
             display_content += f"\n\n<a href='{message_link}'>➡️ Перейти к оригиналу</a>"
 
-        # Format the message
-        response = text.material_info_template.format(
+    # Format the message
+    response = text.material_info_template.format(
             content=display_content,
             content_type=content_type,
             date_added=date_added,
@@ -122,12 +122,12 @@ async def send_material_info(message: Message, content_item: dict) -> None:
         )
 
         # Send the message with status update buttons
-        await message.answer(
-            response,
-            reply_markup=get_status_update_keyboard(content_id),
-            disable_web_page_preview=False,  # Enable link previews
-            parse_mode="HTML"  # Use HTML parse mode
-        )
+    await message.answer(
+        response,
+        reply_markup=get_status_update_keyboard(content_id),
+        disable_web_page_preview=False,  # Enable link previews
+        parse_mode="HTML"  # Use HTML parse mode
+    )
 
 
 @router.callback_query(F.data.startswith("status:"))
