@@ -7,7 +7,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from src.handlers import commands, add_material, get_material
+from src.handlers import commands, add_material, get_material, tag_filter
 from src.consts import BOT_TOKEN
 from src.db.database import db  # Import the database instance
 
@@ -38,6 +38,7 @@ async def main():
     dp.include_router(commands.router)
     dp.include_router(add_material.router)
     dp.include_router(get_material.router)
+    dp.include_router(tag_filter.router)  # Add the new tag filter router
 
     # Start polling
     await bot.delete_webhook(drop_pending_updates=True)

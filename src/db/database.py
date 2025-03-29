@@ -262,6 +262,31 @@ class Database:
                 logger.error("Error deleting content item %s: %s", content_id, e)
                 return False
 
+    async def get_content_item_by_id(self, content_id: int) -> Dict[str, Any] | None:
+        """
+        Get a specific content item by ID.
+
+        Args:
+            content_id: Content item ID
+
+        Returns:
+            Dict or None: Content item data or None if not found
+        """
+        async with self.pool.acquire() as conn:
+            try:
+                query = "SELECT * FROM content_items WHERE id = $1"
+                record = await conn.fetchrow(query, content_id)
+
+                if record:
+                    logger.info("Retrieved content item %s", content_id)
+                    return dict(record)
+
+                logger.warning("Content item %s not found", content_id)
+                return None
+            except Exception as e:
+                logger.error("Error getting content item %s: %s", content_id, e)
+                return None
+
     # Tag operations
 
     async def get_user_tags(self, user_id: int) -> list[Dict[str, Any]]:
@@ -572,6 +597,134 @@ class Database:
 
             except Exception as e:
                 logger.error("Error getting content items for user %s: %s", user_id, e)
+                return []
+
+    async def get_tag_by_id(self, tag_id: int) -> Dict[str, Any] | None:
+        """
+        Get a tag by its ID.
+
+        Args:
+            tag_id: Tag ID
+
+        Returns:
+            Dict or None: Tag data or None if not found
+        """
+        async with self.pool.acquire() as conn:
+            try:
+                query = "SELECT * FROM tags WHERE id = $1"
+                record = await conn.fetchrow(query, tag_id)
+
+                if record:
+                    logger.info("Retrieved tag with ID %s", tag_id)
+                    return dict(record)
+
+                logger.warning("Tag with ID %s not found", tag_id)
+                return None
+            except Exception as e:
+                logger.error("Error getting tag with ID %s: %s", tag_id, e)
+                return None
+
+    async def get_content_by_tags(self,
+                                  user_id: int,
+                                  tags: list[int],
+                                  relation: str = "and",
+                                  limit: int = 100,
+                                  offset: int = 0) -> list[Dict[str, Any]]:
+        """
+        Get content items by tags with pagination support.
+
+        Args:
+            user_id: Telegram user ID
+            tags: List of tag IDs
+            relation: Relation between tags - "and" (all tags) or "or" (any tag)
+            limit: Maximum number of items to return (pagination)
+            offset: Offset for pagination
+
+        Returns:
+            List of content items
+        """
+        if not tags:
+            return []
+
+        async with self.pool.acquire() as conn:
+            try:
+                if relation.lower() == "and":
+                    # Get items that have ALL the specified tags
+                    query = """
+                            WITH filtered_items AS (
+                                SELECT ci.* FROM content_items ci
+                                WHERE ci.user_id = $1 AND ci.id IN (
+                                    SELECT cit.content_item_id
+                                    FROM content_item_tags cit
+                                    WHERE cit.tag_id = ANY($2::int[])
+                                    GROUP BY cit.content_item_id
+                                    HAVING COUNT(DISTINCT cit.tag_id) = $3
+                                )
+                            )
+                            SELECT * FROM filtered_items
+                            ORDER BY 
+                                CASE WHEN status = 'unread' THEN 0 ELSE 1 END,
+                                date_added DESC
+                            LIMIT $4 OFFSET $5
+                        """
+                    records = await conn.fetch(query, user_id, tags, len(tags), limit, offset)
+                    logger.info("Retrieved %s content items with ALL tags %s for user %s (limit=%s, offset=%s)",
+                                len(records), tags, user_id, limit, offset)
+                else:
+                    # Get items that have ANY of the specified tags
+                    query = """
+                            WITH filtered_items AS (
+                                SELECT DISTINCT ci.* FROM content_items ci
+                                JOIN content_item_tags cit ON ci.id = cit.content_item_id
+                                WHERE ci.user_id = $1 AND cit.tag_id = ANY($2::int[])
+                            )
+                            SELECT * FROM filtered_items
+                            ORDER BY 
+                                CASE WHEN status = 'unread' THEN 0 ELSE 1 END,
+                                date_added DESC
+                            LIMIT $3 OFFSET $4
+                        """
+                    records = await conn.fetch(query, user_id, tags, limit, offset)
+                    logger.info("Retrieved %s content items with ANY tags %s for user %s (limit=%s, offset=%s)",
+                                len(records), tags, user_id, limit, offset)
+
+                # Convert records to dictionaries
+                result = [dict(record) for record in records]
+
+                # If we have content items, get their tags
+                if result:
+                    # Extract content item IDs
+                    item_ids = [item["id"] for item in result]
+
+                    # Query to get tags for these content items
+                    tags_query = """
+                            SELECT cit.content_item_id, t.name
+                            FROM content_item_tags cit
+                            JOIN tags t ON cit.tag_id = t.id
+                            WHERE cit.content_item_id = ANY($1)
+                        """
+
+                    # Execute the query to get tags
+                    tag_records = await conn.fetch(tags_query, item_ids)
+
+                    # Create a dictionary to map content_item_id to list of tags
+                    item_tags = {}
+                    for record in tag_records:
+                        item_id = record["content_item_id"]
+                        tag_name = record["name"]
+
+                        if item_id not in item_tags:
+                            item_tags[item_id] = []
+
+                        item_tags[item_id].append(tag_name)
+
+                    # Add tags to each content item
+                    for item in result:
+                        item["tags"] = item_tags.get(item["id"], [])
+
+                return result
+            except Exception as e:
+                logger.error("Error getting content by tags %s for user %s: %s", tags, user_id, e)
                 return []
 
 

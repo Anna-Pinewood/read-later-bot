@@ -164,13 +164,13 @@ async def process_content_type(callback: CallbackQuery, state: FSMContext) -> No
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("tag:"))
+@router.callback_query(ContentItemStates.waiting_for_tag, F.data.startswith("tag:"))
 async def process_tag_selection(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Process tag selection or 'add new tag' / 'skip' options.
 
-    Note: We removed the state filter so it works even if the state was cleared
-    by a new message being sent.
+    This handler only works when we're in the ContentItemStates.waiting_for_tag state,
+    ensuring it doesn't conflict with tag selection in other contexts (like filtering).
 
     Args:
         callback: Callback query from inline keyboard
@@ -303,10 +303,11 @@ async def process_new_tag(message: Message, state: FSMContext) -> None:
         await message.answer("Произошла ошибка при добавлении тега. Пожалуйста, попробуйте позже.")
 
 
-@router.callback_query(F.data.startswith("page:"))
+@router.callback_query(ContentItemStates.waiting_for_tag, F.data.startswith("page:"))
 async def process_tag_pagination(callback: CallbackQuery, state: FSMContext) -> None:
     """
-    Handle pagination for the tag selection keyboard.
+    Handle pagination for the tag selection keyboard during content addition.
+    Only triggers when in the ContentItemStates.waiting_for_tag state.
 
     Args:
         callback: Callback query from inline keyboard
@@ -338,7 +339,7 @@ async def process_tag_pagination(callback: CallbackQuery, state: FSMContext) -> 
         if current_state != ContentItemStates.waiting_for_tag:
             await state.set_state(ContentItemStates.waiting_for_tag)
 
-        logger.info("User %s navigated to tag page %s", user_id, page)
+        logger.info("User %s navigated to tag page %s during content addition", user_id, page)
 
     except Exception as e:
         logger.error("Error processing tag pagination for user %s: %s", user_id, e)

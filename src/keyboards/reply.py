@@ -13,7 +13,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     Create the main reply keyboard with primary commands.
 
     Returns:
-        ReplyKeyboardMarkup: Keyboard with /random, /last, and /all buttons
+        ReplyKeyboardMarkup: Keyboard with main command buttons
     """
     builder = ReplyKeyboardBuilder()
 
@@ -21,10 +21,11 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     builder.add(
         KeyboardButton(text="/random"),
         KeyboardButton(text="/last"),
-        KeyboardButton(text="/all")
+        KeyboardButton(text="/all"),
+        KeyboardButton(text="/bytags")
     )
 
-    # Arrange buttons in a row
-    builder.adjust(3)
+    # Arrange buttons in two rows with 2 buttons per row
+    builder.adjust(2, 2)
 
     return builder.as_markup(resize_keyboard=True, persistent=True)
